@@ -1,32 +1,14 @@
+require 'librarian/source/basic_api'
 require 'librarian/source/local'
 
 module Librarian
   module Source
     class Path
-
+      include BasicApi
       include Local
 
-      class << self
-
-        LOCK_NAME = 'PATH'
-
-        def lock_name
-          LOCK_NAME
-        end
-
-        def from_lock_options(environment, options)
-          new(environment, options[:remote], options.reject{|k, v| k == :remote})
-        end
-
-        def from_spec_args(environment, path, options)
-          recognized_options = []
-          unrecognized_options = options.keys - recognized_options
-          unrecognized_options.empty? or raise Error, "unrecognized options: #{unrecognized_options.join(", ")}"
-
-          new(environment, path, options)
-        end
-
-      end
+      lock_name 'PATH'
+      spec_options []
 
       attr_accessor :environment
       private :environment=
@@ -45,12 +27,6 @@ module Librarian
         other &&
         self.class  == other.class &&
         self.path   == other.path
-      end
-
-      alias :eql? :==
-
-      def hash
-        self.to_s.hash
       end
 
       def to_spec_args

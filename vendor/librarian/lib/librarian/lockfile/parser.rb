@@ -21,10 +21,18 @@ module Librarian
       end
 
       def parse(string)
-        string = string.dup
-        source_type_names_map = Hash[dsl_class.source_types.map{|t| [t[1].lock_name, t[1]]}]
-        source_type_names = dsl_class.source_types.map{|t| t[1].lock_name}
-        lines = string.split(/(\r|\n|\r\n)+/).select{|l| l =~ /\S/}
+        lines = string.lines.map{|l| l.sub(/\s+\z/, '')}.reject(&:empty?)
+        sources = extract_and_parse_sources(lines)
+        manifests = compile(sources)
+        manifests_index = Hash[manifests.map{|m| [m.name, m]}]
+        raise StandardError, "Expected DEPENDENCIES topic!" unless lines.shift == "DEPENDENCIES"
+        dependencies = extract_and_parse_dependencies(lines, manifests_index)
+        Resolution.new(dependencies, manifests)
+      end
+
+    private
+
+      def extract_and_parse_sources(lines)
         sources = []
         while source_type_names.include?(lines.first)
           source = {}
@@ -50,21 +58,20 @@ module Librarian
           source[:manifests] = manifests
           sources << source
         end
-        manifests = compile(sources)
-        manifests_index = Hash[manifests.map{|m| [m.name, m]}]
-        raise StandardError, "Expected DEPENDENCIES topic!" unless lines.shift == "DEPENDENCIES"
+        sources
+      end
+
+      def extract_and_parse_dependencies(lines, manifests_index)
         dependencies = []
         while lines.first =~ /^ {2}([\w-]+)(?: \((.*)\))?$/
           lines.shift
           name, requirement = $1, $2.split(/,\s*/)
           dependencies << Dependency.new(name, requirement, manifests_index[name].source)
         end
-        Resolution.new(dependencies, manifests)
+        dependencies
       end
 
-    private
-
-      def compile(sources_ast)
+      def compile_placeholder_manifests(sources_ast)
         manifests = {}
         sources_ast.each do |source_ast|
           source_type = source_ast[:type]
@@ -78,21 +85,37 @@ module Librarian
             )
           end
         end
+        manifests
+      end
+
+      def compile(sources_ast)
+        manifests = compile_placeholder_manifests(sources_ast)
         manifests = manifests.map do |name, manifest|
           dependencies = manifest.dependencies.map do |d|
             Dependency.new(d.name, d.requirement, manifests[d.name].source)
           end
-          manifest.source.manifest(
-            manifest.name,
-            manifest.version,
-            dependencies
-          )
+          real = Manifest.new(manifest.source, manifest.name)
+          real.version = manifest.version
+          real.dependencies = manifest.dependencies
+          real
         end
         ManifestSet.sort(manifests)
       end
 
       def dsl_class
         environment.dsl_class
+      end
+
+      def source_type_names_map
+        @source_type_names_map ||= begin
+          Hash[dsl_class.source_types.map{|t| [t[1].lock_name, t[1]]}]
+        end
+      end
+
+      def source_type_names
+        @source_type_names ||= begin
+          dsl_class.source_types.map{|t| t[1].lock_name}
+        end
       end
 
     end

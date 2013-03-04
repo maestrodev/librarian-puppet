@@ -8,6 +8,7 @@ require 'zlib'
 require 'securerandom'
 require 'archive/tar/minitar'
 
+require 'librarian/source/basic_api'
 require 'librarian/chef/manifest_reader'
 
 module Librarian
@@ -76,8 +77,7 @@ module Librarian
           end
 
           def version_uri_metadata(version_uri)
-            @version_uri_metadata ||= { }
-            @version_uri_metadata[version_uri.to_s] ||= begin
+            memo(__method__, version_uri.to_s) do
               cache_version_uri_metadata! version_uri
               parse_local_json(version_uri_metadata_cache_path(version_uri))
             end
@@ -89,8 +89,7 @@ module Librarian
           end
 
           def version_uri_manifest(version_uri)
-            @version_uri_manifest ||= { }
-            @version_uri_manifest[version_uri.to_s] ||= begin
+            memo(__method__, version_uri.to_s) do
               cache_version_uri_unpacked! version_uri
               unpacked_path = version_uri_unpacked_cache_path(version_uri)
               manifest_path = ManifestReader.manifest_path(unpacked_path)
@@ -106,8 +105,7 @@ module Librarian
           end
 
           def to_version_uri(version)
-            @to_version_uri ||= { }
-            @to_version_uri[version.to_s] ||= begin
+            memo(__method__, version.to_s) do
               cache_version! version
               version_cache_path(version).read
             end
@@ -126,15 +124,13 @@ module Librarian
           end
 
           def version_cache_path(version)
-            @version_cache_path ||= { }
-            @version_cache_path[version.to_s] ||= begin
+            memo(__method__, version.to_s) do
               cache_path.join("version").join(version.to_s)
             end
           end
 
           def version_uri_cache_path(version_uri)
-            @version_uri_cache_path ||= { }
-            @version_uri_cache_path[version_uri.to_s] ||= begin
+            memo(__method__, version_uri.to_s) do
               cache_path.join("version-uri").join(hexdigest(version_uri))
             end
           end
@@ -145,8 +141,7 @@ module Librarian
           end
 
           def version_uri_metadata_cache_path(version_uri)
-            @version_uri_metadata_cache_path ||= { }
-            @version_uri_metadata_cache_path[version_uri.to_s] ||= begin
+            memo(__method__, version_uri.to_s) do
               version_uri_cache_path(version_uri).join("metadata.json")
             end
           end
@@ -157,8 +152,7 @@ module Librarian
           end
 
           def version_uri_package_cache_path(version_uri)
-            @version_uri_package_cache_path ||= { }
-            @version_uri_package_cache_path[version_uri.to_s] ||= begin
+            memo(__method__, version_uri.to_s) do
               version_uri_cache_path(version_uri).join("package.tar.gz")
             end
           end
@@ -169,8 +163,7 @@ module Librarian
           end
 
           def version_uri_unpacked_cache_path(version_uri)
-            @version_uri_unpacked_cache_path ||= { }
-            @version_uri_unpacked_cache_path[version_uri.to_s] ||= begin
+            memo(__method__, version_uri.to_s) do
               version_uri_cache_path(version_uri).join("package")
             end
           end
@@ -232,39 +225,24 @@ module Librarian
           end
 
           def cache_remote_json!(path, uri)
-            path = Pathname(path)
-            uri = to_uri(uri)
-
-            path.dirname.mkpath unless path.dirname.directory?
-
-            debug { "Caching #{uri} to #{path}" }
-
-            http = Net::HTTP.new(uri.host, uri.port)
-            request = Net::HTTP::Get.new(uri.path)
-            response = http.start{|http| http.request(request)}
-            unless Net::HTTPSuccess === response
-              raise Error, "Could not get #{uri} because #{response.code} #{response.message}!"
-            end
-            json = response.body
-            JSON.parse(json) # verify that it's really JSON.
-            write! path, json
+            cache_remote_object!(path, uri, :type => :json)
           end
 
-          def cache_remote_object!(path, uri)
+          def cache_remote_object!(path, uri, options = { })
             path = Pathname(path)
             uri = to_uri(uri)
-
-            path.dirname.mkpath unless path.dirname.directory?
+            type = options[:type]
 
             debug { "Caching #{uri} to #{path}" }
 
-            http = Net::HTTP.new(uri.host, uri.port)
-            request = Net::HTTP::Get.new(uri.path)
-            response = http.start{|http| http.request(request)}
-            unless Net::HTTPSuccess === response
-              raise Error, "Could not get #{uri} because #{response.code} #{response.message}!"
+            response = http_get(uri)
+
+            object = response.body
+            case type
+            when :json
+              JSON.parse(object) # verify that it's really JSON.
             end
-            write! path, response.body
+            write! path, object
           end
 
           def write!(path, bytes)
@@ -285,9 +263,13 @@ module Librarian
             end
 
             # Cookbook files, as pulled from Opscode Community Site API, are
-            # embedded in a subdirectory of the tarball, and the subdirectory's
-            # name is equal to the name of the cookbook.
-            subtemp = temp.join(name)
+            # embedded in a subdirectory of the tarball. If created by git archive they
+            # can include the subfolder `pax_global_header`, which is ignored.
+            subtemps = temp.children
+            subtemps.empty? and raise "The package archive was empty!"
+            subtemps.delete_if{|pth| pth.to_s[/pax_global_header/]}
+            subtemps.size > 1 and raise "The package archive has too many children!"
+            subtemp = subtemps.first
             debug { "Moving #{relative_path_to(subtemp)} to #{relative_path_to(path)}" }
             FileUtils.mv(subtemp, path)
           ensure
@@ -315,42 +297,63 @@ module Librarian
             environment.logger.relative_path_to(path)
           end
 
+          def http(uri)
+            environment.net_http_class(uri.host).new(uri.host, uri.port)
+          end
+
+          def http_get(uri)
+            max_redirects = 10
+            redirects = []
+
+            loop do
+              debug { "Performing http-get for #{uri}" }
+              http = http(uri)
+              request = Net::HTTP::Get.new(uri.path)
+              response = http.start{|http| http.request(request)}
+
+              case response
+              when Net::HTTPSuccess
+                debug { "Responded with success" }
+                return response
+              when Net::HTTPRedirection
+                location = response["Location"]
+                debug { "Responded with redirect to #{uri}" }
+                redirects.size > max_redirects and raise Error,
+                  "Could not get #{uri} because too many redirects!"
+                redirects.include?(location) and raise Error,
+                  "Could not get #{uri} because redirect cycle!"
+                redirects << location
+                uri = URI.parse(location)
+                # continue the loop
+              else
+                raise Error, "Could not get #{uri} because #{response.code} #{response.message}!"
+              end
+            end
+          end
+
+          def memo(method, *path)
+            ivar = "@#{method}".to_sym
+            unless memo = instance_variable_get(ivar)
+              memo = instance_variable_set(ivar, { })
+            end
+
+            memo.key?(path) or memo[path] = yield
+            memo[path]
+          end
+
         end
 
-        class << self
+        include Librarian::Source::BasicApi
 
-          LOCK_NAME = 'SITE'
+        lock_name 'SITE'
+        spec_options []
 
-          def lock_name
-            LOCK_NAME
-          end
-
-          def from_lock_options(environment, options)
-            new(environment, options[:remote], options.reject{|k, v| k == :remote})
-          end
-
-          def from_spec_args(environment, uri, options)
-            recognized_options = []
-            unrecognized_options = options.keys - recognized_options
-            unrecognized_options.empty? or raise Error, "unrecognized options: #{unrecognized_options.join(", ")}"
-
-            new(environment, uri, options)
-          end
-
-        end
-
-        attr_accessor :environment
-        private :environment=
-        attr_reader :uri
-
-        attr_accessor :_metadata_cache
-        private :_metadata_cache, :_metadata_cache=
+        attr_accessor :environment, :uri
+        private :environment=, :uri=
 
         def initialize(environment, uri, options = {})
           self.environment = environment
-          @uri = uri
-          @cache_path = nil
-          self._metadata_cache = { }
+          self.uri = uri
         end
 
         def to_s
@@ -361,12 +364,6 @@ module Librarian
           other &&
           self.class  == other.class &&
           self.uri    == other.uri
-        end
-
-        alias :eql? :==
-
-        def hash
-          self.to_s.hash
         end
 
         def to_spec_args
@@ -403,13 +400,6 @@ module Librarian
         #   Assumes the Opscode Site API responds with versions in reverse sorted order
         def manifests(name)
           line(name).manifests
-        end
-
-        def manifest(name, version, dependencies)
-          manifest = Manifest.new(self, name)
-          manifest.version = version
-          manifest.dependencies = dependencies
-          manifest
         end
 
         def cache_path
