@@ -1,4 +1,4 @@
-Librarian [![Build Status](https://secure.travis-ci.org/applicationsonline/librarian.png)](http://travis-ci.org/applicationsonline/librarian)
+Librarian [![Build Status](https://secure.travis-ci.org/applicationsonline/librarian.png)](http://travis-ci.org/applicationsonline/librarian) [![Code Climate](https://codeclimate.com/badge.png)](https://codeclimate.com/github/applicationsonline/librarian)
 =========
 
 Librarian is a framework for writing bundlers, which are tools that resolve,
@@ -135,6 +135,11 @@ we vendored it in our repository into the `cookbooks/` directory for us.
 
 The `:path =>` source won't be confused with the `:git =>` source's `:path =>`
 option.
+
+Also, there is shortcut for cookbooks hosted on GitHub, so we may write:
+
+    cookbook "rvm",
+      :github => "fnichol/chef-rvm"
 
 ### How to Use
 
@@ -359,12 +364,7 @@ How to Contribute
 
 ### Running the tests
 
-    # Either
     $ rspec spec
-    $ cucumber
-
-    # Or
-    $ rake
 
 You will probably need some way to isolate gems. Librarian provides a `Gemfile`,
 so if you want to use bundler, you can prepare the directory with the usual
@@ -372,8 +372,6 @@ so if you want to use bundler, you can prepare the directory with the usual
 
     $ bundle install
     $ bundle exec rspec spec
-    $ bundle exec cucumber
-    $ bundle exec rake
 
 ### Installing locally
 

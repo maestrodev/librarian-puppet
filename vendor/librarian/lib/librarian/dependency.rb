@@ -26,6 +26,51 @@ module Librarian
         to_gem_requirement.to_s
       end
 
+      COMPATS_TABLE = {
+        %w(=  = ) => lambda{|s, o| s == o},
+        %w(=  !=) => lambda{|s, o| s != o},
+        %w(=  > ) => lambda{|s, o| s >  o},
+        %w(=  < ) => lambda{|s, o| s <  o},
+        %w(=  >=) => lambda{|s, o| s >= o},
+        %w(=  <=) => lambda{|s, o| s <= o},
+        %w(=  ~>) => lambda{|s, o| s >= o && s.release < o.bump},
+        %w(!= !=) => true,
+        %w(!= > ) => true,
+        %w(!= < ) => true,
+        %w(!= >=) => true,
+        %w(!= <=) => true,
+        %w(!= ~>) => true,
+        %w(>  > ) => true,
+        %w(>  < ) => lambda{|s, o| s < o},
+        %w(>  >=) => true,
+        %w(>  <=) => lambda{|s, o| s < o},
+        %w(>  ~>) => lambda{|s, o| s < o.bump},
+        %w(<  < ) => true,
+        %w(<  >=) => lambda{|s, o| s > o},
+        %w(<  <=) => true,
+        %w(<  ~>) => lambda{|s, o| s > o},
+        %w(>= >=) => true,
+        %w(>= <=) => lambda{|s, o| s <= o},
+        %w(>= ~>) => lambda{|s, o| s < o.bump},
+        %w(<= <=) => true,
+        %w(<= ~>) => lambda{|s, o| s >= o},
+        %w(~> ~>) => lambda{|s, o| s < o.bump && s.bump > o},
+      }
+
+      def consistent_with?(other)
+        sgreq, ogreq = to_gem_requirement, other.to_gem_requirement
+        sreqs, oreqs = sgreq.requirements, ogreq.requirements
+        sreqs.all? do |sreq|
+          oreqs.all? do |oreq|
+            compatible?(sreq, oreq)
+          end
+        end
+      end
+
+      def inconsistent_with?(other)
+        !consistent_with?(other)
+      end
+
       protected
 
       attr_accessor :backing
@@ -37,6 +82,13 @@ module Librarian
           arg = arg.backing if self.class === arg
           arg
         end
+      end
+
+      def compatible?(a, b)
+        a, b = b, a unless COMPATS_TABLE.include?([a.first, b.first])
+        r = COMPATS_TABLE[[a.first, b.first]]
+        r = r.call(a.last, b.last) if r.respond_to?(:call)
+        r
       end
     end
 
@@ -77,11 +129,15 @@ module Librarian
       self.source       == other.source
     end
 
-  private
-
-    def environment
-      source.environment
+    def consistent_with?(other)
+      name != other.name || requirement.consistent_with?(other.requirement)
     end
+
+    def inconsistent_with?(other)
+      !consistent_with?(other)
+    end
+
+  private
 
     def assert_name_valid!(name)
       raise ArgumentError, "name (#{name.inspect}) must be sensible" unless name =~ /\A\S(?:.*\S)?\z/

@@ -1,3 +1,5 @@
 pkg/
 Gemfile.lock
 tmp/
+.project
+*.gem

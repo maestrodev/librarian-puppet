@@ -3,14 +3,14 @@ $:.push File.expand_path("../lib", __FILE__)
 require 'librarian/puppet/version'
 
 Gem::Specification.new do |s|
-  s.name = 'librarian-puppet'
+  s.name = 'librarian-puppet-lmco'
   s.version = Librarian::Puppet::VERSION
   s.platform = Gem::Platform::RUBY
   s.authors = ['Tim Sharpe']
   s.email = ['tim@sharpe.id.au']
-  s.homepage = 'https://github.com/rodjek/librarian-puppet'
+  s.homepage = 'https://github.com/lmco/librarian-puppet'
   s.summary = 'Bundler for your Puppet modules'
-  s.description = 'Simplify deployment of your Puppet infrastructure by
+  s.description = '[Added proxy support.] Simplify deployment of your Puppet infrastructure by
   automatically pulling in modules from the forge and git repositories with
   a single command.'
 

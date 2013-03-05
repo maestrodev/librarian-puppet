@@ -142,7 +142,8 @@ module Librarian
           end
 
           def stream(file, &block)
-            Net::HTTP.get_response(URI.parse("#{source}#{file}")) do |res|
+            #Net::HTTP.get_response(URI.parse("#{source}#{file}")) do |res|
+            http_get(URI.parse("#{source}#{file}")) do |res|
               res.code
 
               res.read_body(&block)
@@ -154,10 +155,57 @@ module Librarian
           end
 
         private
+        
+          def http(uri)
+            environment.net_http_class(uri.host).new(uri.host, uri.port)
+          end
+          
+          def http_get(uri)
+            max_redirects = 10
+            redirects = []
+    
+            loop do
+              
+              debug { "Performing http-get for #{uri}" }
+              debug { "  uri.path = #{uri.path}"}
+              debug { "  uri.host = #{uri.host}"}
+              debug { "  uri.port = #{uri.port}"}
+              debug { "  uri.request_uri = #{uri.request_uri}"}
+                
+              http = http(uri)
 
+              if http.proxy?()
+                debug {"  proxy_address = #{http.proxy_address()}" }
+                debug {"  proxy_port = #{http.proxy_port()}" }
+              end
+              
+              request = Net::HTTP::Get.new(uri.request_uri)
+              response = http.start{|http| http.request(request)}
+    
+              case response
+              when Net::HTTPSuccess
+                debug { "Responded with success" }
+                return response
+              when Net::HTTPRedirection
+                location = response["Location"]
+                debug { "Responded with redirect to #{uri}" }
+                redirects.size > max_redirects and raise Error,
+                  "Could not get #{uri} because too many redirects!"
+                redirects.include?(location) and raise Error,
+                  "Could not get #{uri} because redirect cycle!"
+                redirects << location
+                uri = URI.parse(location)
+                # continue the loop
+              else
+                raise Error, "Could not get #{uri} because #{response.code} #{response.message}!"
+              end
+            end
+          end
+      
           def api_call(path)
             base_url = source.uri
-            resp = Net::HTTP.get_response(URI.parse("#{base_url}/#{path}"))
+            #resp = Net::HTTP.get_response(URI.parse("#{base_url}/#{path}"))
+            resp = http_get(URI.parse("#{base_url}/#{path}"))
             if resp.code.to_i != 200
               nil
             else

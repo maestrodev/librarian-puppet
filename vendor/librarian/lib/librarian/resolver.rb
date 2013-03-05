@@ -13,19 +13,24 @@ module Librarian
     end
 
     def resolve(spec, partial_manifests = [])
-      implementation = Implementation.new(self, spec)
-      partial_manifests_index = Hash[partial_manifests.map{|m| [m.name, m]}]
-      manifests = implementation.resolve(spec.dependencies, partial_manifests_index)
-      enforce_consistency!(spec.dependencies, manifests) if manifests
-      manifests = sort(manifests) if manifests
-      Resolution.new(spec.dependencies, manifests)
+      manifests = implementation(spec).resolve(partial_manifests)
+      if manifests
+        enforce_consistency!(spec.dependencies, manifests)
+        manifests = sort(manifests)
+        Resolution.new(spec.dependencies, manifests)
+      end
+    end
+
+  private
+
+    def implementation(spec)
+      Implementation.new(self, spec)
     end
 
     def enforce_consistency!(dependencies, manifests)
-      return if dependencies.all?{|d|
-        m = manifests[d.name]
-        m && d.satisfied_by?(m)
-      } && ManifestSet.new(manifests).consistent?
+      manifest_set = ManifestSet.new(manifests)
+      return if manifest_set.in_compliance_with?(dependencies)
+      return if manifest_set.consistent?
 
       debug { "Resolver Malfunctioned!" }
       errors = []
@@ -67,8 +72,6 @@ module Librarian
     def sort(manifests)
       ManifestSet.sort(manifests)
     end
-
-  private
 
     def debug(*args, &block)
       environment.logger.debug(*args, &block)

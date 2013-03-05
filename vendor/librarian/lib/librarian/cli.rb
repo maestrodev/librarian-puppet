@@ -19,22 +19,34 @@ module Librarian
       end
     end
 
-    include Particularity
     extend Particularity
 
     class << self
       def bin!
-        begin
-          environment = root_module.environment
-          start
-        rescue Librarian::Error => e
-          environment.ui.error e.message
-          environment.ui.debug e.backtrace.join("\n")
-          exit (e.respond_to?(:status_code) ? e.status_code : 1)
-        rescue Interrupt => e
-          environment.ui.error "\nQuitting..."
-          exit 1
-        end
+        status = with_environment { returning_status { start } }
+        exit status
+      end
+
+      def returning_status
+        yield
+        0
+      rescue Librarian::Error => e
+        environment.ui.error e.message
+        environment.ui.debug e.backtrace.join("\n")
+        e.respond_to?(:status_code) && e.status_code || 1
+      rescue Interrupt => e
+        environment.ui.error "\nQuitting..."
+        1
+      end
+
+      attr_accessor :environment
+
+      def with_environment
+        environment = root_module.environment_class.new
+        self.environment, orig_environment = environment, self.environment
+        yield(environment)
+      ensure
+        self.environment = orig_environment
       end
     end
 
@@ -51,7 +63,7 @@ module Librarian
 
     desc "version", "Displays the version."
     def version
-      say "librarian-#{root_module.version}"
+      say "librarian-#{environment.version}"
     end
 
     desc "config", "Show or edit the config."
@@ -64,16 +76,13 @@ module Librarian
       if key
         raise Error, "cannot set both value and delete" if value && options["delete"]
         if options["delete"]
-          raise Error, "must set either global or local" unless options["global"] ^ options["local"]
-          scope = options["global"] ? :global : options["local"] ? :local : nil
+          scope = config_scope(true)
           environment.config_db[key, scope] = nil
         elsif value
-          raise Error, "must set either global or local" unless options["global"] ^ options["local"]
-          scope = options["global"] ? :global : options["local"] ? :local : nil
+          scope = config_scope(true)
           environment.config_db[key, scope] = value
         else
-          raise Error, "cannot set both global and local" if options["global"] && options["local"]
-          scope = options["global"] ? :global : options["local"] ? :local : nil
+          scope = config_scope(false)
           if value = environment.config_db[key, scope]
             prefix = scope ? "#{key} (#{scope})" : key
             say "#{prefix}: #{value}"
@@ -113,11 +122,9 @@ module Librarian
     def outdated
       ensure!
       resolution = environment.lock
-      resolution.manifests.sort_by(&:name).each do |manifest|
-        source = manifest.source
-        source_manifest = source.manifests(manifest.name).first
-        next if manifest.version == source_manifest.version
-        say "#{manifest.name} (#{manifest.version} -> #{source_manifest.version})"
+      manifests = resolution.manifests.sort_by(&:name)
+      manifests.select(&:outdated?).each do |manifest|
+        say "#{manifest.name} (#{manifest.version} -> #{manifest.latest.version})"
       end
     end
 
@@ -142,7 +149,7 @@ module Librarian
   private
 
     def environment
-      root_module.environment
+      self.class.environment
     end
 
     def ensure!(options = { })
@@ -199,6 +206,17 @@ module Librarian
 
     def relative_path_to(path)
       environment.logger.relative_path_to(path)
+    end
+
+    def config_scope(exclusive)
+      g, l = "global", "local"
+      if exclusive
+        options[g] ^ options[l] or raise Error, "must set either #{g} or #{l}"
+      else
+        options[g] && options[l] and raise Error, "cannot set both #{g} and #{l}"
+      end
+
+      options[g] ? :global : options[l] ? :local : nil
     end
 
   end

@@ -2,36 +2,18 @@ require 'fileutils'
 require 'pathname'
 require 'digest'
 
+require 'librarian/source/basic_api'
 require 'librarian/source/git/repository'
 require 'librarian/source/local'
 
 module Librarian
   module Source
     class Git
-
+      include BasicApi
       include Local
 
-      class << self
-
-        LOCK_NAME = 'GIT'
-
-        def lock_name
-          LOCK_NAME
-        end
-
-        def from_lock_options(environment, options)
-          new(environment, options[:remote], options.reject{|k, v| k == :remote})
-        end
-
-        def from_spec_args(environment, uri, options)
-          recognized_options = [:ref, :path]
-          unrecognized_options = options.keys - recognized_options
-          unrecognized_options.empty? or raise Error, "unrecognized options: #{unrecognized_options.join(", ")}"
-
-          new(environment, uri, options)
-        end
-
-      end
+      lock_name 'GIT'
+      spec_options [:ref, :path]
 
       DEFAULTS = {
         :ref => 'master'
@@ -52,6 +34,8 @@ module Librarian
 
         @repository = nil
         @repository_cache_path = nil
+
+        ref.kind_of?(String) or raise TypeError, "ref must be a String"
       end
 
       def to_s
@@ -65,12 +49,6 @@ module Librarian
         self.ref    == other.ref    &&
         self.path   == other.path   &&
         (self.sha.nil? || other.sha.nil? || self.sha == other.sha)
-      end
-
-      alias :eql? :==
-
-      def hash
-        self.to_s.hash
       end
 
       def to_spec_args

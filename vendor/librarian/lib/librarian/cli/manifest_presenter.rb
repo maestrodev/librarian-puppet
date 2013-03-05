@@ -17,39 +17,46 @@ module Librarian
         full = options[:detailed]
         full = !names.empty? if full.nil?
 
-        if names.empty?
-          names = manifests.map(&:name).sort if names.empty?
-        else
-          missing_names = names.reject{|name| manifest(name)}
-          unless missing_names.empty?
-            raise Error, "not found: #{missing_names.map(&:inspect).join(', ')}"
-          end
-        end
+        names = manifests.map(&:name).sort if names.empty?
+        assert_no_manifests_missing!(names)
 
-        names.each do |name|
-          manifest = manifest(name)
-          present_one(manifest, :detailed => full)
-        end
+        present_each(names, :detailed => full)
       end
 
       def present_one(manifest, options = { })
         full = options[:detailed]
 
         say "#{manifest.name} (#{manifest.version})" do
-          if full
-            say "source: #{manifest.source}"
-            unless manifest.dependencies.empty?
-              say "dependencies:" do
-                manifest.dependencies.sort_by(&:name).each do |dependency|
-                  say "#{dependency.name} (#{dependency.requirement})"
-                end
-              end
-            end
-          end
+          full or next
+
+          present_one_source(manifest)
+          present_one_dependencies(manifest)
         end
       end
 
       private
+
+      def present_each(names, options)
+        names.each do |name|
+          manifest = manifest(name)
+          present_one(manifest, options)
+        end
+      end
+
+      def present_one_source(manifest)
+        say "source: #{manifest.source}"
+      end
+
+      def present_one_dependencies(manifest)
+        manifest.dependencies.empty? and return
+
+        say "dependencies:" do
+          deps = manifest.dependencies.sort_by(&:name)
+          deps.each do |dependency|
+            say "#{dependency.name} (#{dependency.requirement})"
+          end
+        end
+      end
 
       attr_accessor :scope_level, :manifests_index
 
@@ -72,6 +79,13 @@ module Librarian
         yield
       ensure
         self.scope_level = original_scope_level
+      end
+
+      def assert_no_manifests_missing!(names)
+        missing_names = names.reject{|name| manifest(name)}
+        unless missing_names.empty?
+          raise Error, "not found: #{missing_names.map(&:inspect).join(', ')}"
+        end
       end
 
     end
