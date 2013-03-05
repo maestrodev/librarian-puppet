@@ -165,9 +165,21 @@ module Librarian
             redirects = []
     
             loop do
+              
               debug { "Performing http-get for #{uri}" }
+              debug { "  uri.path = #{uri.path}"}
+              debug { "  uri.host = #{uri.host}"}
+              debug { "  uri.port = #{uri.port}"}
+              debug { "  uri.request_uri = #{uri.request_uri}"}
+                
               http = http(uri)
-              request = Net::HTTP::Get.new(uri.path)
+
+              if http.proxy?()
+                debug {"  proxy_address = #{http.proxy_address()}" }
+                debug {"  proxy_port = #{http.proxy_port()}" }
+              end
+              
+              request = Net::HTTP::Get.new(uri.request_uri)
               response = http.start{|http| http.request(request)}
     
               case response
