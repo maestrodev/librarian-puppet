@@ -11,6 +11,7 @@ module Librarian
       source :git => Source::Git
       source :path => Source::Path
       source :github_tarball => Source::GitHubTarball
+      source :svn => Source::Svn
     end
   end
 end
