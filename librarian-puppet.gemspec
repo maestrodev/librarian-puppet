@@ -9,7 +9,7 @@ Gem::Specification.new do |s|
   s.authors = ['Tim Sharpe']
   s.license = 'MIT'
   s.email = ['tim@sharpe.id.au']
-  s.homepage = 'https://github.com/rodjek/librarian-puppet'
+  s.homepage = 'https://github.com/maestrodev/librarian-puppet'
   s.summary = 'Bundler for your Puppet modules'
   s.description = 'Simplify deployment of your Puppet infrastructure by
   automatically pulling in modules from the forge and git repositories with
