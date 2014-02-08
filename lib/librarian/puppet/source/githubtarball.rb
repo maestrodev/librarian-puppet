@@ -9,7 +9,11 @@ module Librarian
   module Puppet
     module Source
       class GitHubTarball
+        include Librarian::Puppet::Util
+
         class Repo
+          include Librarian::Puppet::Util
+
           TOKEN_KEY = 'GITHUB_API_TOKEN'
 
           attr_accessor :source, :name
@@ -55,7 +59,7 @@ module Librarian
             end
 
             unpacked_path = version_unpacked_cache_path(version).children.first
-            FileUtils.cp_r(unpacked_path, install_path)
+            cp_r(unpacked_path, install_path)
           end
 
           def environment
@@ -119,10 +123,6 @@ module Librarian
             Dir["#{environment.vendor_cache}/#{name.sub('/', '-')}*.tar.gz"].each do |old_version|
               FileUtils.rm old_version
             end
-          end
-
-          def debug(*args, &block)
-            environment.logger.debug(*args, &block)
           end
 
         private
