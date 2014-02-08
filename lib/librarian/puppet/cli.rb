@@ -7,6 +7,11 @@ module Librarian
   module Puppet
     class Cli < Librarian::Cli
 
+      def initialize(*)
+        super
+        say "librarian-puppet-maestrodev gem is now deprecated in favor of librarian-puppet 0.9.11 and is no longer updated"
+      end
+
       module Particularity
         def root_module
           Puppet

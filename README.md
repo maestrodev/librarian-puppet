@@ -4,8 +4,9 @@
 
 ## Note
 
-This is a fork of [rodjek librarian-puppet](https://github.com/rodjek/librarian-puppet) to publish to rubygems
-[librarian-puppet-maestrodev](https://rubygems.org/gems/librarian-puppet-maestrodev)
+**Since 0.9.11.6 this fork is no longer used, as I am committing directly to [rodjek's librarian-puppet](https://github.com/rodjek/librarian-puppet) and pushing to [librarian-puppet](https://rubygems.org/gems/librarian-puppet)**
+
+**librarian-puppet-maestrodev 0.9.11.6 is effectively the same as librarian-puppet 0.9.11**
 
 ## Introduction
 

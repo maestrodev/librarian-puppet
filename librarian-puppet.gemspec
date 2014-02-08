@@ -8,12 +8,10 @@ Gem::Specification.new do |s|
   s.platform = Gem::Platform::RUBY
   s.authors = ['Tim Sharpe']
   s.license = 'MIT'
-  s.email = ['tim@sharpe.id.au']
+  s.email = ['support@maestrodev.com']
   s.homepage = 'https://github.com/maestrodev/librarian-puppet'
   s.summary = 'Bundler for your Puppet modules'
-  s.description = 'Simplify deployment of your Puppet infrastructure by
-  automatically pulling in modules from the forge and git repositories with
-  a single command.'
+  s.description = 'librarian-puppet-maestrodev gem is now deprecated in favor of librarian-puppet 0.9.11 and is no longer updated'
 
   s.files = [
     '.gitignore',
